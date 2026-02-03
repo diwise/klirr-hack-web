@@ -1,18 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import L from "leaflet";
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getEntities } from "./ngsiClient";
 import { toFeatureCollection } from "./transformers";
 import type { FeatureCollection } from "./types";
-
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
 
 const defaultCenter: L.LatLngExpression = [59.3326, 18.0649];
 
@@ -48,6 +39,55 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
+const typeAbbreviation: Record<string, string> = {
+  AirQualityObserved: "⛅",
+  Beach: "BH",
+  CityWork: "🚧",
+  CombinedSewageOverflow: "CS",
+  Device: "DV",
+  ExerciseTrail: "ET",
+  IndoorEnvironmentObserved: "IE",
+  Lifebuoy: "LB",
+  RoadAccident: "⚠️",
+  SewagePumpingStation: "SP",
+  SportsField: "SF",
+  SportsVenue: "SV",
+  WasteContainer: "🚮",
+  WaterQualityObserved: "WQ",
+  WeatherObserved: "WO",
+};
+
+const buildSvgIcon = (label: string, color: string) => `
+  <svg width="34" height="34" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/>
+      </filter>
+    </defs>
+    <circle cx="17" cy="17" r="14" fill="${color}" filter="url(#shadow)" />
+    <circle cx="17" cy="17" r="11" fill="rgba(0,0,0,0.25)" />
+    <text x="17" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#f8fafc" font-family="Inter, sans-serif">
+      ${escapeHtml(label)}
+    </text>
+  </svg>
+`;
+
+const getIconForType = (type: string, color: string, cache: Map<string, L.DivIcon>) => {
+  const key = `${type}:${color}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const label = typeAbbreviation[type] ?? type.slice(0, 2).toUpperCase();
+  const icon = L.divIcon({
+    className: "ngsi-type-icon",
+    html: buildSvgIcon(label, color),
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -12],
+  });
+  cache.set(key, icon);
+  return icon;
+};
+
 type MapViewProps = {
   types: string[];
   selectedType: string;
@@ -69,6 +109,7 @@ export const MapView = ({
   const userMarkerRef = useRef<L.CircleMarker | null>(null);
   const shouldFitOnDataRef = useRef(true);
   const didInitialFitRef = useRef(false);
+  const iconCacheRef = useRef<Map<string, L.DivIcon>>(new Map());
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["ngsi-entities", types],
@@ -204,14 +245,10 @@ export const MapView = ({
       const layer = L.geoJSON([], {
         style: (feature) => styleFeature(feature, typeColor),
         pointToLayer: (feature, latlng) => {
-          const props = feature?.properties as { status?: unknown } | undefined;
-          const status = typeof props?.status === "string" ? props.status : undefined;
-          return L.circleMarker(latlng, {
-            radius: 8,
-            color: typeColor,
-            fillColor: status ? statusColor(status) : typeColor,
-            fillOpacity: 0.6,
-          });
+          const props = feature?.properties as { type?: unknown } | undefined;
+          const entityType = typeof props?.type === "string" ? props.type : type;
+          const icon = getIconForType(entityType, typeColor, iconCacheRef.current);
+          return L.marker(latlng, { icon });
         },
         onEachFeature: (feature, leafletLayer) => {
           const props = feature.properties as
@@ -225,12 +262,6 @@ export const MapView = ({
             | undefined;
           const label = escapeHtml(typeof props?.label === "string" ? props.label : "Unknown");
           const entityType = escapeHtml(typeof props?.type === "string" ? props.type : "Entity");
-          const status = escapeHtml(typeof props?.status === "string" ? props.status : "ok");
-          const dateObserved =
-            typeof props?.dateObserved === "string" ? escapeHtml(props.dateObserved) : "";
-          const dateLine = dateObserved
-            ? `<div style=\\\"margin-top: 6px; font-size: 12px;\\\">Obs: ${dateObserved}</div>`
-            : "";
           const attributes = Array.isArray(props?.attributes) ? props.attributes : [];
           const attributeLines = attributes
             .filter(
@@ -246,7 +277,7 @@ export const MapView = ({
             })
             .join("");
           leafletLayer.bindPopup(
-            `<div style=\"font-family: Inter, sans-serif;\"><div style=\"font-weight: 600; font-size: 14px;\">${label}</div><div style=\"font-size: 12px; opacity: 0.7;\">${entityType}</div><div style=\"margin-top: 6px; font-size: 12px;\">Status: ${status}</div>${dateLine}${attributeLines}</div>`,
+            `<div style=\"font-family: Inter, sans-serif;\"><div style=\"font-weight: 600; font-size: 14px;\">${label}</div><div style=\"font-size: 12px; opacity: 0.7;\">${entityType}</div>${attributeLines}</div>`,
           );
         },
       });
