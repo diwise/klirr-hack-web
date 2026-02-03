@@ -1,13 +1,26 @@
-export const EntityPanel = () => {
+type EntityPanelProps = {
+  types: string[];
+  selectedType: string;
+  onTypeChange: (value: string) => void;
+};
+
+export const EntityPanel = ({ types, selectedType, onTypeChange }: EntityPanelProps) => {
   return (
     <aside className="flex h-full flex-col gap-5 border-l border-base-300 bg-base-200 px-6 py-6">
       <div>
         <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Filter</div>
         <div className="mt-3 flex flex-col gap-3">
-          <select className="select select-sm select-bordered">
-            <option>Alla typer</option>
-            <option>Station</option>
-            <option>Sensor</option>
+          <select
+            className="select select-sm select-bordered"
+            value={selectedType}
+            onChange={(event) => onTypeChange(event.target.value)}
+          >
+            <option value="__all__">Alla typer</option>
+            {types.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
           </select>
           <select className="select select-sm select-bordered">
             <option>Alla status</option>

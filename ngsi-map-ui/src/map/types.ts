@@ -22,6 +22,7 @@ export type FeatureProperties = {
   type: string;
   label: string;
   status?: string;
+  dateObserved?: string;
 };
 
 export type Feature = {

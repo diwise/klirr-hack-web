@@ -10,17 +10,24 @@ const hasPointLocation = (
 ): entity is NgsiLdEntity & { location: NgsiGeoProperty } =>
   entity.location?.value?.type === "Point";
 
+const isZeroCoordinate = (coordinates: [number, number]) =>
+  coordinates[0] === 0 && coordinates[1] === 0;
+
 export const toFeatureCollection = (entities: NgsiLdEntity[]): FeatureCollection => {
-  const features = entities.filter(hasPointLocation).map((entity) => ({
-    type: "Feature" as const,
-    geometry: entity.location.value,
-    properties: {
-      id: entity.id,
-      type: entity.type,
-      label: fallbackLabel(entity),
-      status: (entity.status as { value?: string } | undefined)?.value,
-    },
-  }));
+  const features = entities
+    .filter(hasPointLocation)
+    .filter((entity) => !isZeroCoordinate(entity.location.value.coordinates))
+    .map((entity) => ({
+      type: "Feature" as const,
+      geometry: entity.location.value,
+      properties: {
+        id: entity.id,
+        type: entity.type,
+        label: fallbackLabel(entity),
+        status: (entity.status as { value?: string } | undefined)?.value,
+        dateObserved: (entity.dateObserved as { value?: string } | undefined)?.value,
+      },
+    }));
 
   return {
     type: "FeatureCollection",

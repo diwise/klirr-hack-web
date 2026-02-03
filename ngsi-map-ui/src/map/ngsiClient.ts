@@ -10,6 +10,17 @@ export type EntityQuery = {
   geoproperty?: string;
 };
 
+export type NgsiTypeResponse = {
+  type?: string;
+};
+
+export type NgsiTypesPayload = {
+  typesList?: NgsiTypeResponse[] | string[];
+  typeList?: {
+    value?: string[] | NgsiTypeResponse[];
+  };
+};
+
 const mockEntities: NgsiLdEntity[] = [
   {
     id: "urn:ngsi-ld:Station:central",
@@ -50,12 +61,14 @@ export const getEntities = async (query: EntityQuery): Promise<NgsiLdEntity[]> =
   const baseUrl = import.meta.env.VITE_NGSI_BASE_URL as string | undefined;
   const useMock = (import.meta.env.VITE_NGSI_USE_MOCK as string | undefined) === "true";
 
-  if (!baseUrl || useMock) {
+  if ((!baseUrl && !import.meta.env.DEV) || useMock) {
     return Promise.resolve(mockEntities);
   }
 
   const params = buildQuery(query);
-  const url = `${baseUrl.replace(/\/$/, "")}/ngsi-ld/v1/entities${params ? `?${params}` : ""}`;
+  const normalizedBase = baseUrl?.replace(/\/$/, "") ?? "";
+  const proxyBase = import.meta.env.DEV ? "" : normalizedBase;
+  const url = `${proxyBase}/ngsi-ld/v1/entities${params ? `?${params}` : ""}`;
 
   const headers: Record<string, string> = {
     Accept: "application/ld+json",
@@ -72,4 +85,36 @@ export const getEntities = async (query: EntityQuery): Promise<NgsiLdEntity[]> =
   }
 
   return (await response.json()) as NgsiLdEntity[];
+};
+
+export const getTypes = async (): Promise<string[]> => {
+  const baseUrl = import.meta.env.VITE_NGSI_BASE_URL as string | undefined;
+  const useMock = (import.meta.env.VITE_NGSI_USE_MOCK as string | undefined) === "true";
+
+  if ((!baseUrl && !import.meta.env.DEV) || useMock) {
+    return Promise.resolve(["Station", "Sensor"]);
+  }
+
+  const normalizedBase = baseUrl?.replace(/\/$/, "") ?? "";
+  const proxyBase = import.meta.env.DEV ? "" : normalizedBase;
+  const url = `${proxyBase}/ngsi-ld/v1/types`;
+
+  const headers: Record<string, string> = {
+    Accept: "application/ld+json",
+  };
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    throw new Error(`NGSI-LD error: ${response.status}`);
+  }
+
+  const payload = (await response.json()) as NgsiTypesPayload | NgsiTypeResponse[];
+  const typesList = Array.isArray(payload)
+    ? payload
+    : (payload.typesList ?? payload.typeList?.value ?? []);
+
+  return typesList
+    .map((item) => (typeof item === "string" ? item : item.type))
+    .filter((type): type is string => typeof type === "string" && type.length > 0)
+    .sort();
 };
