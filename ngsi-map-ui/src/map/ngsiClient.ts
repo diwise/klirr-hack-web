@@ -70,7 +70,7 @@ export const getEntities = async (query: EntityQuery): Promise<NgsiLdEntity[]> =
   const proxyBase = import.meta.env.DEV ? "" : normalizedBase;
   const url = `${proxyBase}/ngsi-ld/v1/entities${params ? `?${params}` : ""}`;
 
-  const headers: Record<string, string> = {
+  const headers: { Accept: string; Link?: string } = {
     Accept: "application/ld+json",
   };
 

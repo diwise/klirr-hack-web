@@ -1,0 +1,1 @@
+{"root":["./src/App.test.tsx","./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/map/MapView.tsx","./src/map/ngsiClient.ts","./src/map/transformers.ts","./src/map/types.ts","./src/test/setup.ts","./src/ui/EntityPanel.tsx","./src/ui/Sidebar.tsx","./vite.config.ts","./vitest.config.ts"],"version":"5.9.3"}

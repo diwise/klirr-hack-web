@@ -1,7 +1,7 @@
 import type { FeatureCollection, NgsiGeoProperty, NgsiLdEntity } from "./types";
 
 const fallbackLabel = (entity: NgsiLdEntity) => {
-  const name = entity.name as { value?: string } | undefined;
+  const name = entity.name;
   return name?.value ?? entity.id.split(":").pop() ?? entity.id;
 };
 
@@ -24,8 +24,8 @@ export const toFeatureCollection = (entities: NgsiLdEntity[]): FeatureCollection
         id: entity.id,
         type: entity.type,
         label: fallbackLabel(entity),
-        status: (entity.status as { value?: string } | undefined)?.value,
-        dateObserved: (entity.dateObserved as { value?: string } | undefined)?.value,
+        status: entity.status?.value,
+        dateObserved: entity.dateObserved?.value,
       },
     }));
 

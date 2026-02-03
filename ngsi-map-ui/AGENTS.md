@@ -43,6 +43,9 @@ This is a TypeScript SPA for crisis management using Leaflet to visualize NGSI-L
 - `npx @biomejs/biome format --write ./src`
 - `npm run format` before commit
 
+## TypeScript Validation
+- Always run `npm run typecheck` (tsc) during development.
+
 ## Review Checklist
 - Are all new functions fully typed with no implicit `any`?
 - Does the change include tests for critical paths and transforms?

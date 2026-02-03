@@ -10,10 +10,18 @@ export type NgsiGeoProperty = {
   value: GeoJsonGeometry;
 };
 
+export type NgsiProperty<T> = {
+  type?: "Property";
+  value?: T;
+};
+
 export type NgsiLdEntity = {
   id: string;
   type: string;
   location?: NgsiGeoProperty;
+  name?: NgsiProperty<string>;
+  status?: NgsiProperty<string>;
+  dateObserved?: NgsiProperty<string>;
   [key: string]: unknown;
 };
 
