@@ -61,7 +61,7 @@ const App = () => {
         <header className="col-span-3 row-span-1 flex items-center justify-between border-b border-base-300 bg-base-200 px-6">
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Admin dashboard</div>
-            <div className="font-display text-lg">NGSI-LD Geo Monitor</div>
+            <div className="font-display text-lg">Plan B</div>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-full bg-base-300/60 px-3 py-2 text-xs">

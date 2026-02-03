@@ -13,6 +13,6 @@ describe("App", () => {
         <App />
       </QueryClientProvider>,
     );
-    expect(screen.getByText("NGSI-LD Geo Monitor")).toBeInTheDocument();
+    expect(screen.getByText("Plan B")).toBeInTheDocument();
   });
 });

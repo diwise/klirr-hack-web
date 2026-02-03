@@ -10,7 +10,7 @@ export const Sidebar = ({ fromInput, fromMax, minObserved, onFromChange }: Sideb
     <aside className="flex h-full flex-col gap-6 border-r border-base-300 bg-base-200 px-6 py-6">
       <div>
         <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Workspace</div>
-        <div className="mt-2 font-display text-xl">NGSI Control</div>
+        <div className="mt-2 font-display text-xl">Plan B Control</div>
         <div className="mt-1 text-xs text-slate-400" />
       </div>
 
