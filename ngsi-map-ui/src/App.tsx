@@ -1,12 +1,124 @@
 import { useQuery } from "@tanstack/react-query";
+import type { ChangeEvent, KeyboardEvent, MouseEvent } from "react";
 import { useState } from "react";
 import { MapView } from "./map/MapView";
 import { getTypes } from "./map/ngsiClient";
 import { Sidebar } from "./ui/Sidebar";
 
+type TimelineRangeProps = {
+  fromHoursBack: number;
+  toHoursBack: number;
+  onChange: (from: number, to: number) => void;
+};
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const TimelineRange = ({ fromHoursBack, toHoursBack, onChange }: TimelineRangeProps) => {
+  const minHours = 0;
+  const maxHours = 168;
+  const widthHours = Math.max(1, toHoursBack - fromHoursBack);
+  const handlePercent = (value: number) => ((value - minHours) / (maxHours - minHours)) * 100;
+
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const clickedValue = Math.round(minHours + ratio * (maxHours - minHours));
+
+    if (clickedValue >= fromHoursBack && clickedValue <= toHoursBack) {
+      const nextFrom = clamp(clickedValue - Math.round(widthHours / 2), minHours, maxHours);
+      const nextTo = clamp(nextFrom + widthHours, minHours, maxHours);
+      onChange(nextFrom, nextTo);
+      return;
+    }
+
+    const distanceToFrom = Math.abs(clickedValue - fromHoursBack);
+    const distanceToTo = Math.abs(clickedValue - toHoursBack);
+    if (distanceToFrom <= distanceToTo) {
+      const nextFrom = clamp(clickedValue, minHours, Math.min(toHoursBack - 1, maxHours));
+      onChange(nextFrom, toHoursBack);
+    } else {
+      const nextTo = clamp(clickedValue, Math.max(fromHoursBack + 1, minHours), maxHours);
+      onChange(fromHoursBack, nextTo);
+    }
+  };
+
+  const handleFromChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextFrom = clamp(Number(event.target.value), minHours, toHoursBack - 1);
+    onChange(nextFrom, toHoursBack);
+  };
+
+  const handleToChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextTo = clamp(Number(event.target.value), fromHoursBack + 1, maxHours);
+    onChange(fromHoursBack, nextTo);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    const increment = event.shiftKey ? 6 : 1;
+    const direction = event.key === " " ? 1 : -1;
+    const nextFrom = clamp(fromHoursBack + direction * increment, minHours, maxHours - widthHours);
+    const nextTo = clamp(nextFrom + widthHours, minHours, maxHours);
+    onChange(nextFrom, nextTo);
+  };
+
+  return (
+    <div className="mt-3">
+      <div
+        className="relative h-3 w-[320px] rounded-full bg-base-300"
+        aria-valuemax={maxHours}
+        aria-valuemin={minHours}
+        aria-valuenow={fromHoursBack}
+        aria-label="Tidsfönster"
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
+        role="slider"
+        tabIndex={0}
+      >
+        <div
+          className="absolute h-3 rounded-full bg-primary/70"
+          style={{
+            left: `${handlePercent(fromHoursBack)}%`,
+            right: `${100 - handlePercent(toHoursBack)}%`,
+          }}
+        />
+        <div
+          className="absolute -top-1 h-5 w-2 rounded-full bg-primary"
+          style={{ left: `calc(${handlePercent(fromHoursBack)}% - 4px)` }}
+        />
+        <div
+          className="absolute -top-1 h-5 w-2 rounded-full bg-primary"
+          style={{ left: `calc(${handlePercent(toHoursBack)}% - 4px)` }}
+        />
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          className="range range-xs range-primary w-[150px]"
+          max={maxHours}
+          min={minHours}
+          step={1}
+          type="range"
+          value={fromHoursBack}
+          onChange={handleFromChange}
+        />
+        <input
+          className="range range-xs range-primary w-[150px]"
+          max={maxHours}
+          min={minHours}
+          step={1}
+          type="range"
+          value={toHoursBack}
+          onChange={handleToChange}
+        />
+      </div>
+    </div>
+  );
+};
+
 const App = () => {
   const [selectedType, setSelectedType] = useState("__all__");
-  const [hoursBack, setHoursBack] = useState(24);
+  const [fromHoursBack, setFromHoursBack] = useState(0);
+  const [toHoursBack, setToHoursBack] = useState(24);
   const {
     data: types = [],
     isLoading: typesLoading,
@@ -69,18 +181,22 @@ const App = () => {
                 <div className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
                   Tidsfilter
                 </div>
-                <div className="mt-1 flex items-center gap-3">
-                  <input
-                    className="range range-xs range-primary w-36"
-                    max={168}
-                    min={1}
-                    step={1}
-                    type="range"
-                    value={hoursBack}
-                    onChange={(event) => setHoursBack(Number(event.target.value))}
-                  />
-                  <div className="text-xs text-slate-300">Senaste {hoursBack}h</div>
+                <div className="mt-3 flex items-center gap-4">
+                  <div className="text-xs text-slate-300">
+                    {fromHoursBack}h → {toHoursBack}h bakåt
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    Fönster: {Math.max(1, toHoursBack - fromHoursBack)}h
+                  </div>
                 </div>
+                <TimelineRange
+                  fromHoursBack={fromHoursBack}
+                  onChange={(nextFrom, nextTo) => {
+                    setFromHoursBack(nextFrom);
+                    setToHoursBack(nextTo);
+                  }}
+                  toHoursBack={toHoursBack}
+                />
               </div>
               <button className="btn btn-sm btn-ghost" type="button">
                 Spara vy
@@ -91,7 +207,12 @@ const App = () => {
             </div>
           </div>
           <div className="h-[calc(100%-3.5rem)]">
-            <MapView hoursBack={hoursBack} selectedType={selectedType} types={types} />
+            <MapView
+              fromHoursBack={fromHoursBack}
+              selectedType={selectedType}
+              toHoursBack={toHoursBack}
+              types={types}
+            />
           </div>
         </main>
       </div>

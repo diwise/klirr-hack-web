@@ -15,13 +15,18 @@ export type NgsiProperty<T> = {
   value?: T;
 };
 
+export type NgsiDateValue = {
+  "@type"?: string;
+  "@value"?: string;
+};
+
 export type NgsiLdEntity = {
   id: string;
   type: string;
   location?: NgsiGeoProperty;
   name?: NgsiProperty<string>;
   status?: NgsiProperty<string>;
-  dateObserved?: NgsiProperty<string>;
+  dateObserved?: NgsiProperty<NgsiDateValue | string>;
   [key: string]: unknown;
 };
 
@@ -31,6 +36,11 @@ export type FeatureProperties = {
   label: string;
   status?: string;
   dateObserved?: string;
+  attributes: Array<{
+    key: string;
+    value: string;
+    unitCode?: string;
+  }>;
 };
 
 export type Feature = {

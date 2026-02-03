@@ -3,7 +3,7 @@ import L from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { getEntities } from "./ngsiClient";
 import { toFeatureCollection } from "./transformers";
 import type { FeatureCollection } from "./types";
@@ -40,13 +40,22 @@ const styleFeature = (feature?: GeoJSON.Feature, typeColor?: string) => {
   };
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
 type MapViewProps = {
   types: string[];
   selectedType: string;
-  hoursBack: number;
+  fromHoursBack: number;
+  toHoursBack: number;
 };
 
-export const MapView = ({ types, selectedType, hoursBack }: MapViewProps) => {
+export const MapView = ({ types, selectedType, fromHoursBack, toHoursBack }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
   const layerGroupsRef = useRef<Map<string, L.GeoJSON>>(new Map());
@@ -66,38 +75,23 @@ export const MapView = ({ types, selectedType, hoursBack }: MapViewProps) => {
   }, [data]);
 
   const filteredFeatureCollection: FeatureCollection = useMemo(() => {
-    if (hoursBack <= 0) return featureCollection;
-    const cutoff = Date.now() - hoursBack * 60 * 60 * 1000;
+    const minHours = Math.min(fromHoursBack, toHoursBack);
+    const maxHours = Math.max(fromHoursBack, toHoursBack);
+    const windowStart = Date.now() - maxHours * 60 * 60 * 1000;
+    const windowEnd = Date.now() - minHours * 60 * 60 * 1000;
     const features = featureCollection.features.filter((feature) => {
       const dateObserved = feature.properties.dateObserved;
-      if (!dateObserved) return false;
+      if (!dateObserved) return true;
       const timestamp = Date.parse(dateObserved);
-      if (Number.isNaN(timestamp)) return false;
-      return timestamp >= cutoff;
+      if (Number.isNaN(timestamp)) return true;
+      return timestamp >= windowStart && timestamp <= windowEnd;
     });
 
     return {
       type: "FeatureCollection",
       features,
     };
-  }, [featureCollection, hoursBack]);
-
-  const fitToVisibleLayers = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    let bounds: L.LatLngBounds | null = null;
-    for (const layer of layerGroupsRef.current.values()) {
-      if (!map.hasLayer(layer)) continue;
-      const layerBounds = layer.getBounds();
-      if (!layerBounds.isValid()) continue;
-      bounds = bounds ? bounds.extend(layerBounds) : layerBounds;
-    }
-
-    if (bounds) {
-      map.fitBounds(bounds.pad(0.2));
-    }
-  }, []);
+  }, [featureCollection, fromHoursBack, toHoursBack]);
 
   useEffect(() => {
     if (mapRef.current) return;
@@ -119,19 +113,7 @@ export const MapView = ({ types, selectedType, hoursBack }: MapViewProps) => {
     layerControlRef.current = L.control
       .layers({}, {}, { position: "bottomleft", collapsed: false })
       .addTo(map);
-
-    const handleOverlayChange = () => {
-      fitToVisibleLayers();
-    };
-
-    map.on("overlayadd", handleOverlayChange);
-    map.on("overlayremove", handleOverlayChange);
-
-    return () => {
-      map.off("overlayadd", handleOverlayChange);
-      map.off("overlayremove", handleOverlayChange);
-    };
-  }, [fitToVisibleLayers]);
+  }, []);
 
   const activeTypes = useMemo(() => {
     if (selectedType === "__all__") return types;
@@ -164,13 +146,38 @@ export const MapView = ({ types, selectedType, hoursBack }: MapViewProps) => {
         },
         onEachFeature: (feature, leafletLayer) => {
           const props = feature.properties as
-            | { label?: unknown; status?: unknown; type?: unknown }
+            | {
+                label?: unknown;
+                status?: unknown;
+                type?: unknown;
+                dateObserved?: unknown;
+                attributes?: Array<{ key?: unknown; value?: unknown; unitCode?: unknown }>;
+              }
             | undefined;
-          const label = typeof props?.label === "string" ? props.label : "Unknown";
-          const entityType = typeof props?.type === "string" ? props.type : "Entity";
-          const status = typeof props?.status === "string" ? props.status : "ok";
+          const label = escapeHtml(typeof props?.label === "string" ? props.label : "Unknown");
+          const entityType = escapeHtml(typeof props?.type === "string" ? props.type : "Entity");
+          const status = escapeHtml(typeof props?.status === "string" ? props.status : "ok");
+          const dateObserved =
+            typeof props?.dateObserved === "string" ? escapeHtml(props.dateObserved) : "";
+          const dateLine = dateObserved
+            ? `<div style=\\\"margin-top: 6px; font-size: 12px;\\\">Obs: ${dateObserved}</div>`
+            : "";
+          const attributes = Array.isArray(props?.attributes) ? props.attributes : [];
+          const attributeLines = attributes
+            .filter(
+              (attribute) => typeof attribute.key === "string" && attribute.value !== undefined,
+            )
+            .map((attribute) => {
+              const key = escapeHtml(attribute.key as string);
+              const value = escapeHtml(String(attribute.value ?? ""));
+              const unitCode =
+                typeof attribute.unitCode === "string" ? escapeHtml(attribute.unitCode) : "";
+              const suffix = unitCode ? (unitCode === "m" ? unitCode : ` ${unitCode}`) : "";
+              return `<div style=\\\"font-size: 12px;\\\">${key}: ${value}${suffix}</div>`;
+            })
+            .join("");
           leafletLayer.bindPopup(
-            `<div style=\"font-family: Inter, sans-serif;\"><div style=\"font-weight: 600; font-size: 14px;\">${label}</div><div style=\"font-size: 12px; opacity: 0.7;\">${entityType}</div><div style=\"margin-top: 6px; font-size: 12px;\">Status: ${status}</div></div>`,
+            `<div style=\"font-family: Inter, sans-serif;\"><div style=\"font-weight: 600; font-size: 14px;\">${label}</div><div style=\"font-size: 12px; opacity: 0.7;\">${entityType}</div><div style=\"margin-top: 6px; font-size: 12px;\">Status: ${status}</div>${dateLine}${attributeLines}</div>`,
           );
         },
       });
@@ -214,9 +221,7 @@ export const MapView = ({ types, selectedType, hoursBack }: MapViewProps) => {
       if (!features) continue;
       layer.addData(features as GeoJSON.GeoJsonObject);
     }
-
-    fitToVisibleLayers();
-  }, [filteredFeatureCollection, fitToVisibleLayers]);
+  }, [filteredFeatureCollection]);
 
   return (
     <div className="map-panel relative h-full w-full rounded-2xl border border-base-300 shadow-soft">
