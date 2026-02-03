@@ -28,3 +28,13 @@ body {
   background: radial-gradient(circle at top right, rgba(45, 212, 191, 0.08), transparent 50%),
     radial-gradient(circle at bottom left, rgba(96, 165, 250, 0.12), transparent 50%), #0b1220;
 }
+
+.ngsi-type-icon {
+  background: transparent;
+  border: none;
+}
+
+.ngsi-type-icon svg {
+  display: block;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+}

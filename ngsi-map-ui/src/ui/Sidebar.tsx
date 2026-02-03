@@ -1,10 +1,11 @@
 type SidebarProps = {
   fromInput: string;
+  fromMax: string;
   minObserved?: number;
   onFromChange: (value: string) => void;
 };
 
-export const Sidebar = ({ fromInput, minObserved, onFromChange }: SidebarProps) => {
+export const Sidebar = ({ fromInput, fromMax, minObserved, onFromChange }: SidebarProps) => {
   return (
     <aside className="flex h-full flex-col gap-6 border-r border-base-300 bg-base-200 px-6 py-6">
       <div>
@@ -67,6 +68,7 @@ export const Sidebar = ({ fromInput, minObserved, onFromChange }: SidebarProps) 
             Från
             <input
               className="input input-sm input-bordered"
+              max={fromMax}
               type="datetime-local"
               value={fromInput}
               onChange={(event) => onFromChange(event.target.value)}

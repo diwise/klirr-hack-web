@@ -57,12 +57,19 @@ const buildQuery = (query: EntityQuery) => {
   return params.toString();
 };
 
-export const getEntities = async (query: EntityQuery): Promise<NgsiLdEntity[]> => {
+export const getEntities = async (
+  query: EntityQuery,
+  signal?: AbortSignal,
+): Promise<NgsiLdEntity[]> => {
   const baseUrl = import.meta.env.VITE_NGSI_BASE_URL as string | undefined;
   const useMock = (import.meta.env.VITE_NGSI_USE_MOCK as string | undefined) === "true";
 
   if ((!baseUrl && !import.meta.env.DEV) || useMock) {
-    return Promise.resolve(mockEntities);
+    const filtered = query.type
+      ? mockEntities.filter((entity) => entity.type === query.type)
+      : mockEntities;
+    const limited = query.limit ? filtered.slice(0, query.limit) : filtered;
+    return Promise.resolve(limited);
   }
 
   const params = buildQuery(query);
@@ -76,10 +83,10 @@ export const getEntities = async (query: EntityQuery): Promise<NgsiLdEntity[]> =
 
   const contextUrl = import.meta.env.VITE_NGSI_CONTEXT as string | undefined;
   if (contextUrl) {
-    headers.Link = `<${contextUrl}>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\"`;
+    headers.Link = `<${contextUrl}>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"`;
   }
 
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers, signal });
   if (!response.ok) {
     throw new Error(`NGSI-LD error: ${response.status}`);
   }
@@ -87,7 +94,7 @@ export const getEntities = async (query: EntityQuery): Promise<NgsiLdEntity[]> =
   return (await response.json()) as NgsiLdEntity[];
 };
 
-export const getTypes = async (): Promise<string[]> => {
+export const getTypes = async (signal?: AbortSignal): Promise<string[]> => {
   const baseUrl = import.meta.env.VITE_NGSI_BASE_URL as string | undefined;
   const useMock = (import.meta.env.VITE_NGSI_USE_MOCK as string | undefined) === "true";
 
@@ -103,7 +110,7 @@ export const getTypes = async (): Promise<string[]> => {
     Accept: "application/ld+json",
   };
 
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers, signal });
   if (!response.ok) {
     throw new Error(`NGSI-LD error: ${response.status}`);
   }

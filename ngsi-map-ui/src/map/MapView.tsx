@@ -67,12 +67,7 @@ const typeAbbreviation: Record<string, string> = {
 
 const buildSvgIcon = (label: string, color: string) => `
   <svg width="34" height="34" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/>
-      </filter>
-    </defs>
-    <circle cx="17" cy="17" r="14" fill="${color}" filter="url(#shadow)" />
+    <circle cx="17" cy="17" r="14" fill="${color}" />
     <circle cx="17" cy="17" r="11" fill="rgba(0,0,0,0.25)" />
     <text x="17" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#f8fafc" font-family="Inter, sans-serif">
       ${escapeHtml(label)}
@@ -106,32 +101,28 @@ const getTemperatureValue = (attributes: Array<{ key?: unknown; value?: unknown 
 
 type MapViewProps = {
   types: string[];
-  selectedType: string;
   rangeStart?: number;
   onObservedRange?: (range: { min: number; max: number }) => void;
   fitSignal?: number;
 };
 
-export const MapView = ({
-  types,
-  selectedType,
-  rangeStart,
-  onObservedRange,
-  fitSignal,
-}: MapViewProps) => {
+export const MapView = ({ types, rangeStart, onObservedRange, fitSignal }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
   const layerGroupsRef = useRef<Map<string, L.GeoJSON>>(new Map());
   const userMarkerRef = useRef<L.CircleMarker | null>(null);
-  const shouldFitOnDataRef = useRef(true);
+  const shouldFitOnDataRef = useRef(false);
   const didInitialFitRef = useRef(false);
   const iconCacheRef = useRef<Map<string, L.DivIcon>>(new Map());
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["ngsi-entities", types],
-    queryFn: async () => {
-      if (types.length === 0) return [];
-      const results = await Promise.all(types.map((type) => getEntities({ limit: 200, type })));
+    enabled: types.length > 0,
+    queryFn: async ({ signal }) => {
+      const results = await Promise.all(
+        types.map((type) => getEntities({ limit: 200, type }, signal)),
+      );
       return results.flat();
     },
     refetchInterval: 15000,
@@ -159,27 +150,26 @@ export const MapView = ({
     };
   }, [featureCollection, rangeStart]);
 
-  const fitToEntities = useCallback(() => {
+  const fitToAllEntities = useCallback((): boolean => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map) return false;
 
     let bounds: L.LatLngBounds | null = null;
     for (const layer of layerGroupsRef.current.values()) {
-      if (!map.hasLayer(layer)) continue;
       const layerBounds = layer.getBounds();
       if (!layerBounds.isValid()) continue;
       bounds = bounds ? bounds.extend(layerBounds) : layerBounds;
     }
 
-    if (bounds) {
-      map.fitBounds(bounds.pad(0.2));
-    }
+    if (!bounds) return false;
+    map.fitBounds(bounds.pad(0.2));
+    return true;
   }, []);
 
   useEffect(() => {
     if (!fitSignal) return;
-    fitToEntities();
-  }, [fitSignal, fitToEntities]);
+    fitToAllEntities();
+  }, [fitSignal, fitToAllEntities]);
 
   useEffect(() => {
     if (!onObservedRange) return;
@@ -199,9 +189,9 @@ export const MapView = ({
   }, [featureCollection, onObservedRange]);
 
   useEffect(() => {
-    if (mapRef.current) return;
+    if (mapRef.current || !mapContainerRef.current) return;
 
-    const map = L.map("map", {
+    const map = L.map(mapContainerRef.current, {
       center: defaultCenter,
       zoom: 12,
       zoomControl: false,
@@ -219,44 +209,62 @@ export const MapView = ({
       .layers({}, {}, { position: "bottomleft", collapsed: false })
       .addTo(map);
 
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          map.setView([latitude, longitude], 12, { animate: true });
-          shouldFitOnDataRef.current = false;
-          if (!userMarkerRef.current) {
-            userMarkerRef.current = L.circleMarker([latitude, longitude], {
-              radius: 7,
-              color: "#38bdf8",
-              fillColor: "#38bdf8",
-              fillOpacity: 0.9,
-            }).addTo(map);
-          } else {
-            userMarkerRef.current.setLatLng([latitude, longitude]);
-          }
-        },
-        () => {
-          shouldFitOnDataRef.current = true;
-        },
-        { enableHighAccuracy: true, maximumAge: 60_000, timeout: 5_000 },
-      );
-    } else {
-      shouldFitOnDataRef.current = true;
-    }
-  }, []);
+    const cleanup = () => {
+      map.remove();
+      mapRef.current = null;
+      layerControlRef.current = null;
+      layerGroupsRef.current.clear();
+      userMarkerRef.current = null;
+      shouldFitOnDataRef.current = false;
+      didInitialFitRef.current = false;
+    };
 
-  const activeTypes = useMemo(() => {
-    if (selectedType === "__all__") return types;
-    return types.includes(selectedType) ? [selectedType] : [];
-  }, [selectedType, types]);
+    if (!("geolocation" in navigator)) {
+      shouldFitOnDataRef.current = true;
+      return cleanup;
+    }
+
+    let cancelled = false;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (cancelled) return;
+        const { latitude, longitude } = position.coords;
+        map.setView([latitude, longitude], 12, { animate: true });
+        shouldFitOnDataRef.current = false;
+        if (!userMarkerRef.current) {
+          userMarkerRef.current = L.circleMarker([latitude, longitude], {
+            radius: 7,
+            color: "#38bdf8",
+            fillColor: "#38bdf8",
+            fillOpacity: 0.9,
+          }).addTo(map);
+        } else {
+          userMarkerRef.current.setLatLng([latitude, longitude]);
+        }
+      },
+      () => {
+        if (cancelled) return;
+        shouldFitOnDataRef.current = true;
+        if (!didInitialFitRef.current) {
+          if (fitToAllEntities()) {
+            didInitialFitRef.current = true;
+          }
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 5_000 },
+    );
+
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [fitToAllEntities]);
 
   useEffect(() => {
     const map = mapRef.current;
     const layerControl = layerControlRef.current;
     if (!map || !layerControl) return;
 
-    const activeSet = new Set(activeTypes);
     const layerGroups = layerGroupsRef.current;
     const typesWithData = new Set(
       filteredFeatureCollection.features.map((feature) => feature.properties.type),
@@ -327,20 +335,10 @@ export const MapView = ({
       });
 
       layer.addTo(map);
-      layerControl.addOverlay(layer, type);
+      layerControl.addOverlay(layer, escapeHtml(type));
       layerGroups.set(type, layer);
     }
-
-    for (const [type, layer] of layerGroups.entries()) {
-      if (activeSet.has(type)) {
-        if (!map.hasLayer(layer)) {
-          layer.addTo(map);
-        }
-      } else if (map.hasLayer(layer)) {
-        map.removeLayer(layer);
-      }
-    }
-  }, [activeTypes, filteredFeatureCollection.features, types]);
+  }, [filteredFeatureCollection.features, types]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -367,10 +365,11 @@ export const MapView = ({
     }
 
     if (shouldFitOnDataRef.current && !didInitialFitRef.current) {
-      fitToEntities();
-      didInitialFitRef.current = true;
+      if (fitToAllEntities()) {
+        didInitialFitRef.current = true;
+      }
     }
-  }, [filteredFeatureCollection, fitToEntities]);
+  }, [filteredFeatureCollection, fitToAllEntities]);
 
   return (
     <div className="map-panel relative h-full w-full rounded-2xl border border-base-300 shadow-soft">
@@ -392,7 +391,7 @@ export const MapView = ({
         </button>
       </div>
 
-      <div id="map" className="h-full w-full rounded-2xl" />
+      <div ref={mapContainerRef} className="h-full w-full rounded-2xl" />
     </div>
   );
 };

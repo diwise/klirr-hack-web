@@ -1,20 +1,37 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { MapView } from "./map/MapView";
 import { getTypes } from "./map/ngsiClient";
 import { Sidebar } from "./ui/Sidebar";
 
-const toInputValue = (value: number) => new Date(value).toISOString().slice(0, 16);
-const fromInputValue = (value: string) => {
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? null : parsed;
+const pad2 = (value: number) => String(value).padStart(2, "0");
+
+// datetime-local uses local time without timezone (YYYY-MM-DDTHH:mm)
+const toDateTimeLocalValue = (timestampMs: number) => {
+  const date = new Date(timestampMs);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+};
+
+const parseDateTimeLocalValue = (value: string): number | null => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match;
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    0,
+    0,
+  );
+  const timestamp = date.getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
 };
 
 const App = () => {
-  const [selectedType, setSelectedType] = useState("__all__");
   const [observedRange, setObservedRange] = useState<{ min: number; max: number } | null>(null);
-  const [rangeStart, setRangeStart] = useState<number | null>(null);
-  const [fromInput, setFromInput] = useState("");
+  const [rangeStart, setRangeStart] = useState(() => Date.now() - 24 * 60 * 60 * 1000);
   const [fitRequest, setFitRequest] = useState(0);
   const {
     data: types = [],
@@ -22,34 +39,21 @@ const App = () => {
     error: typesError,
   } = useQuery({
     queryKey: ["ngsi-types"],
-    queryFn: getTypes,
+    queryFn: ({ signal }) => getTypes(signal),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,
     refetchOnMount: false,
   });
 
-  useEffect(() => {
-    if (!observedRange) return;
-    if (rangeStart === null) {
-      const now = Date.now();
-      const defaultStart = now - 24 * 60 * 60 * 1000;
-      const clampedStart = Math.max(observedRange.min, defaultStart);
-      setRangeStart(clampedStart);
-      setFromInput(toInputValue(clampedStart));
-      return;
-    }
-    if (rangeStart < observedRange.min) {
-      setRangeStart(observedRange.min);
-      setFromInput(toInputValue(observedRange.min));
-    }
-  }, [observedRange, rangeStart]);
-
   const handleFromInputChange = (value: string) => {
-    setFromInput(value);
-    const parsed = fromInputValue(value);
+    const parsed = parseDateTimeLocalValue(value);
     if (parsed === null) return;
-    setRangeStart(parsed);
+    // Prevent selecting a start time in the future.
+    setRangeStart(Math.min(parsed, Date.now()));
   };
+
+  const rangeStartInput = toDateTimeLocalValue(rangeStart);
+  const nowInput = toDateTimeLocalValue(Date.now());
 
   return (
     <div className="h-full bg-base-100 text-base-content">
@@ -73,7 +77,8 @@ const App = () => {
         </header>
 
         <Sidebar
-          fromInput={fromInput}
+          fromInput={rangeStartInput}
+          fromMax={nowInput}
           minObserved={observedRange?.min}
           onFromChange={handleFromInputChange}
         />
@@ -94,9 +99,11 @@ const App = () => {
               <div className="flex items-center gap-2">
                 <div className="text-lg font-semibold">Live karta</div>
                 <button
+                  aria-label="Centrera kartan"
                   className="btn btn-xs btn-ghost"
                   onClick={() => setFitRequest((value) => value + 1)}
                   type="button"
+                  title="Centrera kartan"
                 >
                   <svg
                     aria-hidden="true"
@@ -117,8 +124,7 @@ const App = () => {
           <div className="h-[calc(100%-3.5rem)]">
             <MapView
               onObservedRange={(range) => setObservedRange(range)}
-              rangeStart={rangeStart ?? undefined}
-              selectedType={selectedType}
+              rangeStart={rangeStart}
               fitSignal={fitRequest}
               types={types}
             />
