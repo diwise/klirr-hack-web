@@ -3,7 +3,7 @@ import L from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getEntities } from "./ngsiClient";
 import { toFeatureCollection } from "./transformers";
 import type { FeatureCollection } from "./types";
@@ -42,23 +42,33 @@ const styleFeature = (feature?: GeoJSON.Feature, typeColor?: string) => {
 
 const escapeHtml = (value: string) =>
   value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 
 type MapViewProps = {
   types: string[];
   selectedType: string;
-  fromHoursBack: number;
-  toHoursBack: number;
+  rangeStart?: number;
+  rangeEnd?: number;
+  onObservedRange?: (range: { min: number; max: number }) => void;
 };
 
-export const MapView = ({ types, selectedType, fromHoursBack, toHoursBack }: MapViewProps) => {
+export const MapView = ({
+  types,
+  selectedType,
+  rangeStart,
+  rangeEnd,
+  onObservedRange,
+}: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
   const layerGroupsRef = useRef<Map<string, L.GeoJSON>>(new Map());
+  const userMarkerRef = useRef<L.CircleMarker | null>(null);
+  const shouldFitOnDataRef = useRef(true);
+  const didInitialFitRef = useRef(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["ngsi-entities", types],
@@ -75,10 +85,9 @@ export const MapView = ({ types, selectedType, fromHoursBack, toHoursBack }: Map
   }, [data]);
 
   const filteredFeatureCollection: FeatureCollection = useMemo(() => {
-    const minHours = Math.min(fromHoursBack, toHoursBack);
-    const maxHours = Math.max(fromHoursBack, toHoursBack);
-    const windowStart = Date.now() - maxHours * 60 * 60 * 1000;
-    const windowEnd = Date.now() - minHours * 60 * 60 * 1000;
+    if (rangeStart === undefined || rangeEnd === undefined) return featureCollection;
+    const windowStart = Math.min(rangeStart, rangeEnd);
+    const windowEnd = Math.max(rangeStart, rangeEnd);
     const features = featureCollection.features.filter((feature) => {
       const dateObserved = feature.properties.dateObserved;
       if (!dateObserved) return true;
@@ -91,7 +100,41 @@ export const MapView = ({ types, selectedType, fromHoursBack, toHoursBack }: Map
       type: "FeatureCollection",
       features,
     };
-  }, [featureCollection, fromHoursBack, toHoursBack]);
+  }, [featureCollection, rangeEnd, rangeStart]);
+
+  const fitToEntities = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    let bounds: L.LatLngBounds | null = null;
+    for (const layer of layerGroupsRef.current.values()) {
+      if (!map.hasLayer(layer)) continue;
+      const layerBounds = layer.getBounds();
+      if (!layerBounds.isValid()) continue;
+      bounds = bounds ? bounds.extend(layerBounds) : layerBounds;
+    }
+
+    if (bounds) {
+      map.fitBounds(bounds.pad(0.2));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!onObservedRange) return;
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (const feature of featureCollection.features) {
+      const dateObserved = feature.properties.dateObserved;
+      if (!dateObserved) continue;
+      const timestamp = Date.parse(dateObserved);
+      if (Number.isNaN(timestamp)) continue;
+      if (timestamp < min) min = timestamp;
+      if (timestamp > max) max = timestamp;
+    }
+    if (Number.isFinite(min) && Number.isFinite(max)) {
+      onObservedRange({ min, max });
+    }
+  }, [featureCollection, onObservedRange]);
 
   useEffect(() => {
     if (mapRef.current) return;
@@ -113,6 +156,32 @@ export const MapView = ({ types, selectedType, fromHoursBack, toHoursBack }: Map
     layerControlRef.current = L.control
       .layers({}, {}, { position: "bottomleft", collapsed: false })
       .addTo(map);
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          map.setView([latitude, longitude], 12, { animate: true });
+          shouldFitOnDataRef.current = false;
+          if (!userMarkerRef.current) {
+            userMarkerRef.current = L.circleMarker([latitude, longitude], {
+              radius: 7,
+              color: "#38bdf8",
+              fillColor: "#38bdf8",
+              fillOpacity: 0.9,
+            }).addTo(map);
+          } else {
+            userMarkerRef.current.setLatLng([latitude, longitude]);
+          }
+        },
+        () => {
+          shouldFitOnDataRef.current = true;
+        },
+        { enableHighAccuracy: true, maximumAge: 60_000, timeout: 5_000 },
+      );
+    } else {
+      shouldFitOnDataRef.current = true;
+    }
   }, []);
 
   const activeTypes = useMemo(() => {
@@ -221,7 +290,12 @@ export const MapView = ({ types, selectedType, fromHoursBack, toHoursBack }: Map
       if (!features) continue;
       layer.addData(features as GeoJSON.GeoJsonObject);
     }
-  }, [filteredFeatureCollection]);
+
+    if (shouldFitOnDataRef.current && !didInitialFitRef.current) {
+      fitToEntities();
+      didInitialFitRef.current = true;
+    }
+  }, [filteredFeatureCollection, fitToEntities]);
 
   return (
     <div className="map-panel relative h-full w-full rounded-2xl border border-base-300 shadow-soft">

@@ -45,6 +45,7 @@ This is a TypeScript SPA for crisis management using Leaflet to visualize NGSI-L
 
 ## TypeScript Validation
 - Always run `npm run typecheck` (tsc) during development.
+- Always run `tsc -noEmit`
 
 ## Review Checklist
 - Are all new functions fully typed with no implicit `any`?

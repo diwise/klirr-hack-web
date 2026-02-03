@@ -13,6 +13,19 @@ const hasPointLocation = (
 const isZeroCoordinate = (coordinates: [number, number]) =>
   coordinates[0] === 0 && coordinates[1] === 0;
 
+const resolveObservedDate = (entity: NgsiLdEntity) => {
+  const preferred =
+    entity.type === "RoadAccident" || entity.type === "RoadAccicent"
+      ? (entity.accidentDate?.value ?? entity.dateObserved?.value)
+      : entity.dateObserved?.value;
+
+  if (typeof preferred === "string") {
+    return preferred;
+  }
+
+  return preferred?.["@value"];
+};
+
 const asStringValue = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -75,10 +88,7 @@ export const toFeatureCollection = (entities: NgsiLdEntity[]): FeatureCollection
         type: entity.type,
         label: fallbackLabel(entity),
         status: entity.status?.value,
-        dateObserved:
-          typeof entity.dateObserved?.value === "string"
-            ? entity.dateObserved.value
-            : entity.dateObserved?.value?.["@value"],
+        dateObserved: resolveObservedDate(entity),
         attributes: extractAttributes(entity),
       },
     }));

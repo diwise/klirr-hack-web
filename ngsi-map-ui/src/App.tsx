@@ -1,74 +1,75 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ChangeEvent, KeyboardEvent, MouseEvent } from "react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapView } from "./map/MapView";
 import { getTypes } from "./map/ngsiClient";
 import { Sidebar } from "./ui/Sidebar";
 
 type TimelineRangeProps = {
-  fromHoursBack: number;
-  toHoursBack: number;
-  onChange: (from: number, to: number) => void;
+  rangeStart: number;
+  rangeEnd: number;
+  min: number;
+  max: number;
+  onChange: (start: number, end: number) => void;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const formatDate = (value: number) => new Date(value).toLocaleString("sv-SE");
 
-const TimelineRange = ({ fromHoursBack, toHoursBack, onChange }: TimelineRangeProps) => {
-  const minHours = 0;
-  const maxHours = 168;
-  const widthHours = Math.max(1, toHoursBack - fromHoursBack);
-  const handlePercent = (value: number) => ((value - minHours) / (maxHours - minHours)) * 100;
+const TimelineRange = ({ rangeStart, rangeEnd, min, max, onChange }: TimelineRangeProps) => {
+  const windowSize = Math.max(1, rangeEnd - rangeStart);
+  const handlePercent = (value: number) => ((value - min) / (max - min)) * 100;
 
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-    const clickedValue = Math.round(minHours + ratio * (maxHours - minHours));
+    const clickedValue = Math.round(min + ratio * (max - min));
 
-    if (clickedValue >= fromHoursBack && clickedValue <= toHoursBack) {
-      const nextFrom = clamp(clickedValue - Math.round(widthHours / 2), minHours, maxHours);
-      const nextTo = clamp(nextFrom + widthHours, minHours, maxHours);
-      onChange(nextFrom, nextTo);
+    if (clickedValue >= rangeStart && clickedValue <= rangeEnd) {
+      const nextStart = clamp(clickedValue - Math.round(windowSize / 2), min, max - windowSize);
+      const nextEnd = clamp(nextStart + windowSize, min, max);
+      onChange(nextStart, nextEnd);
       return;
     }
 
-    const distanceToFrom = Math.abs(clickedValue - fromHoursBack);
-    const distanceToTo = Math.abs(clickedValue - toHoursBack);
-    if (distanceToFrom <= distanceToTo) {
-      const nextFrom = clamp(clickedValue, minHours, Math.min(toHoursBack - 1, maxHours));
-      onChange(nextFrom, toHoursBack);
+    const distanceToStart = Math.abs(clickedValue - rangeStart);
+    const distanceToEnd = Math.abs(clickedValue - rangeEnd);
+    if (distanceToStart <= distanceToEnd) {
+      const nextStart = clamp(clickedValue, min, Math.min(rangeEnd - 1, max));
+      onChange(nextStart, rangeEnd);
     } else {
-      const nextTo = clamp(clickedValue, Math.max(fromHoursBack + 1, minHours), maxHours);
-      onChange(fromHoursBack, nextTo);
+      const nextEnd = clamp(clickedValue, Math.max(rangeStart + 1, min), max);
+      onChange(rangeStart, nextEnd);
     }
   };
 
   const handleFromChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextFrom = clamp(Number(event.target.value), minHours, toHoursBack - 1);
-    onChange(nextFrom, toHoursBack);
+    const nextStart = clamp(Number(event.target.value), min, rangeEnd - 1);
+    onChange(nextStart, rangeEnd);
   };
 
   const handleToChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextTo = clamp(Number(event.target.value), fromHoursBack + 1, maxHours);
-    onChange(fromHoursBack, nextTo);
+    const nextEnd = clamp(Number(event.target.value), rangeStart + 1, max);
+    onChange(rangeStart, nextEnd);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    const increment = event.shiftKey ? 6 : 1;
+    const increment = event.shiftKey ? 60 * 60 * 1000 : 15 * 60 * 1000;
     const direction = event.key === " " ? 1 : -1;
-    const nextFrom = clamp(fromHoursBack + direction * increment, minHours, maxHours - widthHours);
-    const nextTo = clamp(nextFrom + widthHours, minHours, maxHours);
-    onChange(nextFrom, nextTo);
+    const nextStart = clamp(rangeStart + direction * increment, min, max - windowSize);
+    const nextEnd = clamp(nextStart + windowSize, min, max);
+    onChange(nextStart, nextEnd);
   };
 
   return (
     <div className="mt-3">
       <div
         className="relative h-3 w-[320px] rounded-full bg-base-300"
-        aria-valuemax={maxHours}
-        aria-valuemin={minHours}
-        aria-valuenow={fromHoursBack}
+        aria-valuemax={max}
+        aria-valuemin={min}
+        aria-valuenow={rangeStart}
         aria-label="Tidsfönster"
         onClick={handleClick}
         onKeyDown={handleKeyDown}
@@ -78,36 +79,36 @@ const TimelineRange = ({ fromHoursBack, toHoursBack, onChange }: TimelineRangePr
         <div
           className="absolute h-3 rounded-full bg-primary/70"
           style={{
-            left: `${handlePercent(fromHoursBack)}%`,
-            right: `${100 - handlePercent(toHoursBack)}%`,
+            left: `${handlePercent(rangeStart)}%`,
+            right: `${100 - handlePercent(rangeEnd)}%`,
           }}
         />
         <div
           className="absolute -top-1 h-5 w-2 rounded-full bg-primary"
-          style={{ left: `calc(${handlePercent(fromHoursBack)}% - 4px)` }}
+          style={{ left: `calc(${handlePercent(rangeStart)}% - 4px)` }}
         />
         <div
           className="absolute -top-1 h-5 w-2 rounded-full bg-primary"
-          style={{ left: `calc(${handlePercent(toHoursBack)}% - 4px)` }}
+          style={{ left: `calc(${handlePercent(rangeEnd)}% - 4px)` }}
         />
       </div>
       <div className="mt-2 flex items-center gap-2">
         <input
           className="range range-xs range-primary w-[150px]"
-          max={maxHours}
-          min={minHours}
+          max={max}
+          min={min}
           step={1}
           type="range"
-          value={fromHoursBack}
+          value={rangeStart}
           onChange={handleFromChange}
         />
         <input
           className="range range-xs range-primary w-[150px]"
-          max={maxHours}
-          min={minHours}
+          max={max}
+          min={min}
           step={1}
           type="range"
-          value={toHoursBack}
+          value={rangeEnd}
           onChange={handleToChange}
         />
       </div>
@@ -117,8 +118,10 @@ const TimelineRange = ({ fromHoursBack, toHoursBack, onChange }: TimelineRangePr
 
 const App = () => {
   const [selectedType, setSelectedType] = useState("__all__");
-  const [fromHoursBack, setFromHoursBack] = useState(0);
-  const [toHoursBack, setToHoursBack] = useState(24);
+  const [observedRange, setObservedRange] = useState<{ min: number; max: number } | null>(null);
+  const [rangeStart, setRangeStart] = useState<number | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const {
     data: types = [],
     isLoading: typesLoading,
@@ -130,6 +133,43 @@ const App = () => {
     gcTime: Number.POSITIVE_INFINITY,
     refetchOnMount: false,
   });
+
+  const windowSize = useMemo(() => {
+    if (rangeStart === null || rangeEnd === null) return 0;
+    return Math.max(1, rangeEnd - rangeStart);
+  }, [rangeEnd, rangeStart]);
+
+  useEffect(() => {
+    if (!observedRange) return;
+    if (rangeStart === null || rangeEnd === null) {
+      setRangeStart(observedRange.min);
+      setRangeEnd(observedRange.max);
+      return;
+    }
+    if (rangeStart < observedRange.min || rangeEnd > observedRange.max) {
+      setRangeStart(observedRange.min);
+      setRangeEnd(observedRange.max);
+    }
+  }, [observedRange, rangeEnd, rangeStart]);
+
+  useEffect(() => {
+    if (!isPlaying || !observedRange || rangeStart === null || rangeEnd === null) return;
+    const step = 15 * 60 * 1000;
+    const interval = window.setInterval(() => {
+      setRangeStart((prev) => {
+        if (prev === null) return prev;
+        const next = prev + step;
+        const maxStart = observedRange.max - windowSize;
+        return next > maxStart ? maxStart : next;
+      });
+      setRangeEnd((prev) => {
+        if (prev === null) return prev;
+        const next = prev + step;
+        return next > observedRange.max ? observedRange.max : next;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [isPlaying, observedRange, rangeEnd, rangeStart, windowSize]);
 
   return (
     <div className="h-full bg-base-100 text-base-content">
@@ -182,21 +222,74 @@ const App = () => {
                   Tidsfilter
                 </div>
                 <div className="mt-3 flex items-center gap-4">
-                  <div className="text-xs text-slate-300">
-                    {fromHoursBack}h → {toHoursBack}h bakåt
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    Fönster: {Math.max(1, toHoursBack - fromHoursBack)}h
-                  </div>
+                  {observedRange && rangeStart !== null && rangeEnd !== null && (
+                    <>
+                      <div className="text-xs text-slate-300">
+                        {formatDate(rangeStart)} → {formatDate(rangeEnd)}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Fönster: {Math.max(1, Math.round((rangeEnd - rangeStart) / 3600000))}h
+                      </div>
+                    </>
+                  )}
                 </div>
-                <TimelineRange
-                  fromHoursBack={fromHoursBack}
-                  onChange={(nextFrom, nextTo) => {
-                    setFromHoursBack(nextFrom);
-                    setToHoursBack(nextTo);
-                  }}
-                  toHoursBack={toHoursBack}
-                />
+                {observedRange && rangeStart !== null && rangeEnd !== null && (
+                  <TimelineRange
+                    max={observedRange.max}
+                    min={observedRange.min}
+                    onChange={(nextStart, nextEnd) => {
+                      setRangeStart(nextStart);
+                      setRangeEnd(nextEnd);
+                    }}
+                    rangeEnd={rangeEnd}
+                    rangeStart={rangeStart}
+                  />
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    className="btn btn-xs btn-outline"
+                    onClick={() => setIsPlaying((prev) => !prev)}
+                    type="button"
+                  >
+                    {isPlaying ? "Pausa" : "Spela"}
+                  </button>
+                  <button
+                    className="btn btn-xs btn-ghost"
+                    onClick={() => {
+                      if (!observedRange || rangeStart === null || rangeEnd === null) return;
+                      const step = 15 * 60 * 1000;
+                      const nextStart = clamp(
+                        rangeStart - step,
+                        observedRange.min,
+                        observedRange.max,
+                      );
+                      const nextEnd = clamp(rangeEnd - step, observedRange.min, observedRange.max);
+                      setRangeStart(nextStart);
+                      setRangeEnd(nextEnd);
+                    }}
+                    type="button"
+                  >
+                    ◀ 15m
+                  </button>
+                  <button
+                    className="btn btn-xs btn-ghost"
+                    onClick={() => {
+                      if (!observedRange || rangeStart === null || rangeEnd === null) return;
+                      const step = 15 * 60 * 1000;
+                      const nextStart = clamp(
+                        rangeStart + step,
+                        observedRange.min,
+                        observedRange.max,
+                      );
+                      const nextEnd = clamp(rangeEnd + step, observedRange.min, observedRange.max);
+                      setRangeStart(nextStart);
+                      setRangeEnd(nextEnd);
+                    }}
+                    type="button"
+                  >
+                    15m ▶
+                  </button>
+                </div>
               </div>
               <button className="btn btn-sm btn-ghost" type="button">
                 Spara vy
@@ -208,9 +301,10 @@ const App = () => {
           </div>
           <div className="h-[calc(100%-3.5rem)]">
             <MapView
-              fromHoursBack={fromHoursBack}
+              onObservedRange={(range) => setObservedRange(range)}
+              rangeEnd={rangeEnd ?? undefined}
+              rangeStart={rangeStart ?? undefined}
               selectedType={selectedType}
-              toHoursBack={toHoursBack}
               types={types}
             />
           </div>
