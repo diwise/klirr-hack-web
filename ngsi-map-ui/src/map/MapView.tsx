@@ -21,6 +21,14 @@ const statusColor = (status?: string) => {
   return "#60a5fa";
 };
 
+const weatherTemperatureColor = (temperature: number) => {
+  if (temperature >= 20) return "#ef4444";
+  if (temperature >= 10) return "#f59e0b";
+  if (temperature >= -10) return "#22c55e";
+  if (temperature >= -20) return "#38bdf8";
+  return "#1e3a8a";
+};
+
 const styleFeature = (feature?: GeoJSON.Feature, typeColor?: string) => {
   const props = feature?.properties as { status?: unknown } | undefined;
   const status = typeof props?.status === "string" ? props.status : undefined;
@@ -47,7 +55,7 @@ const typeAbbreviation: Record<string, string> = {
   Device: "DV",
   ExerciseTrail: "ET",
   IndoorEnvironmentObserved: "IE",
-  Lifebuoy: "LB",
+  Lifebuoy: "🛟",
   RoadAccident: "⚠️",
   SewagePumpingStation: "SP",
   SportsField: "SF",
@@ -88,20 +96,28 @@ const getIconForType = (type: string, color: string, cache: Map<string, L.DivIco
   return icon;
 };
 
+const getTemperatureValue = (attributes: Array<{ key?: unknown; value?: unknown }>) => {
+  const entry = attributes.find((attribute) => attribute.key === "temperature");
+  if (!entry) return null;
+  const raw = typeof entry.value === "string" ? entry.value : String(entry.value ?? "");
+  const numeric = Number.parseFloat(raw.replace(",", "."));
+  return Number.isNaN(numeric) ? null : numeric;
+};
+
 type MapViewProps = {
   types: string[];
   selectedType: string;
   rangeStart?: number;
-  rangeEnd?: number;
   onObservedRange?: (range: { min: number; max: number }) => void;
+  fitSignal?: number;
 };
 
 export const MapView = ({
   types,
   selectedType,
   rangeStart,
-  rangeEnd,
   onObservedRange,
+  fitSignal,
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
@@ -126,9 +142,9 @@ export const MapView = ({
   }, [data]);
 
   const filteredFeatureCollection: FeatureCollection = useMemo(() => {
-    if (rangeStart === undefined || rangeEnd === undefined) return featureCollection;
-    const windowStart = Math.min(rangeStart, rangeEnd);
-    const windowEnd = Math.max(rangeStart, rangeEnd);
+    if (rangeStart === undefined) return featureCollection;
+    const windowStart = rangeStart;
+    const windowEnd = Date.now();
     const features = featureCollection.features.filter((feature) => {
       const dateObserved = feature.properties.dateObserved;
       if (!dateObserved) return true;
@@ -141,7 +157,7 @@ export const MapView = ({
       type: "FeatureCollection",
       features,
     };
-  }, [featureCollection, rangeEnd, rangeStart]);
+  }, [featureCollection, rangeStart]);
 
   const fitToEntities = useCallback(() => {
     const map = mapRef.current;
@@ -159,6 +175,11 @@ export const MapView = ({
       map.fitBounds(bounds.pad(0.2));
     }
   }, []);
+
+  useEffect(() => {
+    if (!fitSignal) return;
+    fitToEntities();
+  }, [fitSignal, fitToEntities]);
 
   useEffect(() => {
     if (!onObservedRange) return;
@@ -237,17 +258,40 @@ export const MapView = ({
 
     const activeSet = new Set(activeTypes);
     const layerGroups = layerGroupsRef.current;
+    const typesWithData = new Set(
+      filteredFeatureCollection.features.map((feature) => feature.properties.type),
+    );
+
+    for (const [type, layer] of layerGroups.entries()) {
+      if (!typesWithData.has(type)) {
+        if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+        layerControl.removeLayer(layer);
+        layerGroups.delete(type);
+      }
+    }
 
     for (const type of types) {
+      if (!typesWithData.has(type)) continue;
       if (layerGroups.has(type)) continue;
 
       const typeColor = hashColor(type);
       const layer = L.geoJSON([], {
         style: (feature) => styleFeature(feature, typeColor),
         pointToLayer: (feature, latlng) => {
-          const props = feature?.properties as { type?: unknown } | undefined;
+          const props = feature?.properties as
+            | { type?: unknown; attributes?: Array<{ key?: unknown; value?: unknown }> }
+            | undefined;
           const entityType = typeof props?.type === "string" ? props.type : type;
-          const icon = getIconForType(entityType, typeColor, iconCacheRef.current);
+          let iconColor = typeColor;
+          if (entityType === "WeatherObserved" && props?.attributes) {
+            const temperature = getTemperatureValue(props.attributes);
+            if (temperature !== null) {
+              iconColor = weatherTemperatureColor(temperature);
+            }
+          }
+          const icon = getIconForType(entityType, iconColor, iconCacheRef.current);
           return L.marker(latlng, { icon });
         },
         onEachFeature: (feature, leafletLayer) => {
@@ -296,7 +340,7 @@ export const MapView = ({
         map.removeLayer(layer);
       }
     }
-  }, [activeTypes, types]);
+  }, [activeTypes, filteredFeatureCollection.features, types]);
 
   useEffect(() => {
     const map = mapRef.current;

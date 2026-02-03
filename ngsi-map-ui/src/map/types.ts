@@ -28,6 +28,7 @@ export type NgsiLdEntity = {
   status?: NgsiProperty<string>;
   dateObserved?: NgsiProperty<NgsiDateValue | string>;
   accidentDate?: NgsiProperty<NgsiDateValue | string>;
+  endDate?: NgsiProperty<NgsiDateValue | string>;
   [key: string]: unknown;
 };
 

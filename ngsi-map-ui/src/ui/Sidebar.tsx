@@ -1,18 +1,10 @@
 type SidebarProps = {
   fromInput: string;
-  toInput: string;
   minObserved?: number;
   onFromChange: (value: string) => void;
-  onToChange: (value: string) => void;
 };
 
-export const Sidebar = ({
-  fromInput,
-  toInput,
-  minObserved,
-  onFromChange,
-  onToChange,
-}: SidebarProps) => {
+export const Sidebar = ({ fromInput, minObserved, onFromChange }: SidebarProps) => {
   return (
     <aside className="flex h-full flex-col gap-6 border-r border-base-300 bg-base-200 px-6 py-6">
       <div>
@@ -75,20 +67,9 @@ export const Sidebar = ({
             Från
             <input
               className="input input-sm input-bordered"
-              max={toInput}
               type="datetime-local"
               value={fromInput}
               onChange={(event) => onFromChange(event.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-slate-400">
-            Till
-            <input
-              className="input input-sm input-bordered"
-              min={fromInput}
-              type="datetime-local"
-              value={toInput}
-              onChange={(event) => onToChange(event.target.value)}
             />
           </label>
         </div>

@@ -17,7 +17,9 @@ const resolveObservedDate = (entity: NgsiLdEntity) => {
   const preferred =
     entity.type === "RoadAccident" || entity.type === "RoadAccicent"
       ? (entity.accidentDate?.value ?? entity.dateObserved?.value)
-      : entity.dateObserved?.value;
+      : entity.type === "CityWork"
+        ? (entity.endDate?.value ?? entity.dateObserved?.value)
+        : entity.dateObserved?.value;
 
   if (typeof preferred === "string") {
     return preferred;

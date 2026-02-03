@@ -4,8 +4,6 @@ import { MapView } from "./map/MapView";
 import { getTypes } from "./map/ngsiClient";
 import { Sidebar } from "./ui/Sidebar";
 
-const clampRange = (start: number, end: number): [number, number] =>
-  start > end ? [end, start] : [start, end];
 const toInputValue = (value: number) => new Date(value).toISOString().slice(0, 16);
 const fromInputValue = (value: string) => {
   const parsed = Date.parse(value);
@@ -16,9 +14,8 @@ const App = () => {
   const [selectedType, setSelectedType] = useState("__all__");
   const [observedRange, setObservedRange] = useState<{ min: number; max: number } | null>(null);
   const [rangeStart, setRangeStart] = useState<number | null>(null);
-  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
   const [fromInput, setFromInput] = useState("");
-  const [toInput, setToInput] = useState("");
+  const [fitRequest, setFitRequest] = useState(0);
   const {
     data: types = [],
     isLoading: typesLoading,
@@ -33,40 +30,25 @@ const App = () => {
 
   useEffect(() => {
     if (!observedRange) return;
-    if (rangeStart === null || rangeEnd === null) {
+    if (rangeStart === null) {
       const now = Date.now();
-      setRangeStart(observedRange.min);
-      setRangeEnd(now);
-      setFromInput(toInputValue(observedRange.min));
-      setToInput(toInputValue(now));
+      const defaultStart = now - 24 * 60 * 60 * 1000;
+      const clampedStart = Math.max(observedRange.min, defaultStart);
+      setRangeStart(clampedStart);
+      setFromInput(toInputValue(clampedStart));
       return;
     }
     if (rangeStart < observedRange.min) {
       setRangeStart(observedRange.min);
       setFromInput(toInputValue(observedRange.min));
     }
-    if (rangeEnd > Date.now()) {
-      setRangeEnd(Date.now());
-      setToInput(toInputValue(Date.now()));
-    }
-  }, [observedRange, rangeEnd, rangeStart]);
+  }, [observedRange, rangeStart]);
 
   const handleFromInputChange = (value: string) => {
     setFromInput(value);
     const parsed = fromInputValue(value);
     if (parsed === null) return;
-    const [start, end] = clampRange(parsed, rangeEnd ?? parsed);
-    setRangeStart(start);
-    setRangeEnd(end);
-  };
-
-  const handleToInputChange = (value: string) => {
-    setToInput(value);
-    const parsed = fromInputValue(value);
-    if (parsed === null) return;
-    const [start, end] = clampRange(rangeStart ?? parsed, parsed);
-    setRangeStart(start);
-    setRangeEnd(end);
+    setRangeStart(parsed);
   };
 
   return (
@@ -94,8 +76,6 @@ const App = () => {
           fromInput={fromInput}
           minObserved={observedRange?.min}
           onFromChange={handleFromInputChange}
-          onToChange={handleToInputChange}
-          toInput={toInput}
         />
 
         <main className="row-span-1 overflow-hidden bg-base-100 px-6 py-6">
@@ -111,16 +91,35 @@ const App = () => {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Geo overview</div>
-              <div className="text-lg font-semibold">Live karta</div>
+              <div className="flex items-center gap-2">
+                <div className="text-lg font-semibold">Live karta</div>
+                <button
+                  className="btn btn-xs btn-ghost"
+                  onClick={() => setFitRequest((value) => value + 1)}
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 3l2.4 6.2L21 12l-6.6 2.8L12 21l-2.4-6.2L3 12l6.6-2.8L12 3z" />
+                    <circle cx="12" cy="12" r="3.2" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-4" />
           </div>
           <div className="h-[calc(100%-3.5rem)]">
             <MapView
               onObservedRange={(range) => setObservedRange(range)}
-              rangeEnd={rangeEnd ?? undefined}
               rangeStart={rangeStart ?? undefined}
               selectedType={selectedType}
+              fitSignal={fitRequest}
               types={types}
             />
           </div>
