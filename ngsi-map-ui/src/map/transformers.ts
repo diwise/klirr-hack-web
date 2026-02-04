@@ -9,7 +9,7 @@ const hasSupportedLocation = (
   entity: NgsiLdEntity,
 ): entity is NgsiLdEntity & { location: NgsiGeoProperty } => {
   const geometryType = entity.location?.value?.type;
-  return geometryType === "Point" || geometryType === "LineString";
+  return geometryType === "Point" || geometryType === "LineString" || geometryType === "Polygon";
 };
 
 const isZeroCoordinate = (coordinate: [number, number]) =>
@@ -28,6 +28,12 @@ const isValidNgsiGeometry = (geometry: NgsiGeoProperty["value"]) => {
     if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
     const validCount = coordinates.filter(isValidCoordinate).length;
     return validCount >= 2;
+  }
+
+  if (geometry.type === "Polygon") {
+    const rings = geometry.coordinates;
+    if (!Array.isArray(rings) || rings.length < 1) return false;
+    return rings.some((ring) => canRenderAsPolygon(ring));
   }
 
   return false;

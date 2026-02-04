@@ -29,12 +29,44 @@ const weatherTemperatureColor = (temperature: number) => {
   return "#1e3a8a";
 };
 
+const severityColor = (severity?: string) => {
+  if (!severity) return null;
+  const normalized = severity.toLowerCase();
+  if (normalized === "yellow") return "#facc15";
+  if (normalized === "orange") return "#fb923c";
+  if (normalized === "red") return "#ef4444";
+  return null;
+};
+
+const getSeverityValue = (attributes: Array<{ key?: unknown; value?: unknown }>) => {
+  const entry = attributes.find((attribute) => attribute.key === "severity");
+  if (!entry) return null;
+  return typeof entry.value === "string" ? entry.value : String(entry.value ?? "");
+};
+
 const styleFeature = (feature?: GeoJSON.Feature, typeColor?: string) => {
-  const props = feature?.properties as { status?: unknown } | undefined;
+  const props = feature?.properties as
+    | { status?: unknown; type?: unknown; attributes?: Array<{ key?: unknown; value?: unknown }> }
+    | undefined;
   const status = typeof props?.status === "string" ? props.status : undefined;
+  const entityType = typeof props?.type === "string" ? props.type : undefined;
+  const geometryType = feature?.geometry?.type;
+  const isLineLike = geometryType === "LineString" || geometryType === "Polygon";
+  const baseColor = typeColor ?? statusColor(status);
+
+  let resolvedColor = baseColor;
+  if (entityType === "WeatherObserved" && geometryType === "Polygon" && props?.attributes) {
+    const severity = getSeverityValue(props.attributes) ?? undefined;
+    const severityResolved = severityColor(severity);
+    if (severityResolved) {
+      resolvedColor = severityResolved;
+    }
+  }
+
   return {
-    color: typeColor ?? statusColor(status),
-    weight: 2,
+    color: resolvedColor,
+    fillColor: resolvedColor,
+    weight: isLineLike ? 5 : 2,
     fillOpacity: 0.35,
   };
 };
@@ -65,6 +97,14 @@ const typeAbbreviation: Record<string, string> = {
   WeatherObserved: "🌦",
   Incident: "🚨",
 };
+
+const typeLabel: Record<string, string> = {
+  RoadAccident: "Trafikolycka",
+  WeatherObserved: "Väderobservation",
+  Incident: "Incident",
+};
+
+const getTypeLabel = (type: string) => typeLabel[type] ?? type;
 
 const buildSvgIcon = (label: string, color: string) => `
   <svg width="34" height="34" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
@@ -338,7 +378,8 @@ export const MapView = ({
               }
             | undefined;
           const label = escapeHtml(typeof props?.label === "string" ? props.label : "Unknown");
-          const entityType = escapeHtml(typeof props?.type === "string" ? props.type : "Entity");
+          const rawType = typeof props?.type === "string" ? props.type : "Entity";
+          const entityType = escapeHtml(getTypeLabel(rawType));
           const attributes = Array.isArray(props?.attributes) ? props.attributes : [];
           const attributeLines = attributes
             .filter(
@@ -360,7 +401,7 @@ export const MapView = ({
       });
 
       layer.addTo(map);
-      layerControl.addOverlay(layer, escapeHtml(type));
+      layerControl.addOverlay(layer, escapeHtml(getTypeLabel(type)));
       layerGroups.set(type, layer);
     }
   }, [filteredFeatureCollection.features, types]);
