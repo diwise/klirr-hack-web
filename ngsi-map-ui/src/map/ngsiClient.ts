@@ -47,6 +47,24 @@ const mockEntities: NgsiLdEntity[] = [
     },
   },
   {
+    id: "urn:ngsi-ld:Route:loop",
+    type: "Route",
+    name: { type: "Property", value: "Loop" },
+    status: { type: "Property", value: "active" },
+    location: {
+      type: "GeoProperty",
+      value: {
+        type: "LineString",
+        coordinates: [
+          [18.055, 59.34],
+          [18.07, 59.35],
+          [18.085, 59.34],
+          [18.055, 59.34],
+        ],
+      },
+    },
+  },
+  {
     id: "urn:ngsi-ld:Station:north",
     type: "Station",
     name: { type: "Property", value: "North" },

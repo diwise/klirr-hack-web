@@ -1,4 +1,4 @@
-import type { FeatureCollection, NgsiGeoProperty, NgsiLdEntity } from "./types";
+import type { FeatureCollection, GeoJsonGeometry, NgsiGeoProperty, NgsiLdEntity } from "./types";
 
 const fallbackLabel = (entity: NgsiLdEntity) => {
   const name = entity.name;
@@ -18,7 +18,7 @@ const isZeroCoordinate = (coordinate: [number, number]) =>
 const isValidCoordinate = (coordinate: [number, number]) =>
   Number.isFinite(coordinate[0]) && Number.isFinite(coordinate[1]) && !isZeroCoordinate(coordinate);
 
-const isValidGeometry = (geometry: NgsiGeoProperty["value"]) => {
+const isValidNgsiGeometry = (geometry: NgsiGeoProperty["value"]) => {
   if (geometry.type === "Point") {
     return isValidCoordinate(geometry.coordinates);
   }
@@ -31,6 +31,30 @@ const isValidGeometry = (geometry: NgsiGeoProperty["value"]) => {
   }
 
   return false;
+};
+
+const isClosedLineString = (coordinates: [number, number][]) => {
+  if (coordinates.length < 2) return false;
+  const first = coordinates[0];
+  const last = coordinates[coordinates.length - 1];
+  if (!first || !last) return false;
+  return first[0] === last[0] && first[1] === last[1];
+};
+
+const canRenderAsPolygon = (coordinates: [number, number][]) => {
+  if (coordinates.length < 4) return false;
+  if (!isClosedLineString(coordinates)) return false;
+  return coordinates.every(isValidCoordinate);
+};
+
+const toRenderableGeometry = (geometry: NgsiGeoProperty["value"]): GeoJsonGeometry => {
+  if (geometry.type === "LineString" && canRenderAsPolygon(geometry.coordinates)) {
+    return {
+      type: "Polygon",
+      coordinates: [geometry.coordinates],
+    };
+  }
+  return geometry;
 };
 
 const resolveObservedDate = (entity: NgsiLdEntity) => {
@@ -101,10 +125,10 @@ const extractAttributes = (entity: NgsiLdEntity) => {
 export const toFeatureCollection = (entities: NgsiLdEntity[]): FeatureCollection => {
   const features = entities
     .filter(hasSupportedLocation)
-    .filter((entity) => isValidGeometry(entity.location.value))
+    .filter((entity) => isValidNgsiGeometry(entity.location.value))
     .map((entity) => ({
       type: "Feature" as const,
-      geometry: entity.location.value,
+      geometry: toRenderableGeometry(entity.location.value),
       properties: {
         id: entity.id,
         type: entity.type,

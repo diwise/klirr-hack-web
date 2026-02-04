@@ -8,11 +8,18 @@ export type GeoJsonLineString = {
   coordinates: [number, number][];
 };
 
-export type GeoJsonGeometry = GeoJsonPoint | GeoJsonLineString;
+export type GeoJsonPolygon = {
+  type: "Polygon";
+  coordinates: [number, number][][];
+};
+
+export type NgsiGeoJsonGeometry = GeoJsonPoint | GeoJsonLineString;
+
+export type GeoJsonGeometry = NgsiGeoJsonGeometry | GeoJsonPolygon;
 
 export type NgsiGeoProperty = {
   type: "GeoProperty";
-  value: GeoJsonGeometry;
+  value: NgsiGeoJsonGeometry;
 };
 
 export type NgsiProperty<T> = {
