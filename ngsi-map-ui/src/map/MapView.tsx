@@ -61,8 +61,9 @@ const typeAbbreviation: Record<string, string> = {
   SportsField: "SF",
   SportsVenue: "SV",
   WasteContainer: "🚮",
-  WaterQualityObserved: "WQ",
-  WeatherObserved: "WO",
+  WaterQualityObserved: "💦",
+  WeatherObserved: "🌦",
+  Incident: "🚨",
 };
 
 const buildSvgIcon = (label: string, color: string) => `
@@ -104,9 +105,20 @@ type MapViewProps = {
   rangeStart?: number;
   onObservedRange?: (range: { min: number; max: number }) => void;
   fitSignal?: number;
+  pollingPaused?: boolean;
+  refreshSignal?: number;
+  onFetchMeta?: (meta: { lastFetchedAt?: number; entityCount: number }) => void;
 };
 
-export const MapView = ({ types, rangeStart, onObservedRange, fitSignal }: MapViewProps) => {
+export const MapView = ({
+  types,
+  rangeStart,
+  onObservedRange,
+  fitSignal,
+  pollingPaused,
+  refreshSignal,
+  onFetchMeta,
+}: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
@@ -116,7 +128,7 @@ export const MapView = ({ types, rangeStart, onObservedRange, fitSignal }: MapVi
   const didInitialFitRef = useRef(false);
   const iconCacheRef = useRef<Map<string, L.DivIcon>>(new Map());
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, dataUpdatedAt } = useQuery({
     queryKey: ["ngsi-entities", types],
     enabled: types.length > 0,
     queryFn: async ({ signal }) => {
@@ -125,7 +137,7 @@ export const MapView = ({ types, rangeStart, onObservedRange, fitSignal }: MapVi
       );
       return results.flat();
     },
-    refetchInterval: 15000,
+    refetchInterval: pollingPaused ? false : 15000,
   });
 
   const featureCollection: FeatureCollection = useMemo(() => {
@@ -170,6 +182,19 @@ export const MapView = ({ types, rangeStart, onObservedRange, fitSignal }: MapVi
     if (!fitSignal) return;
     fitToAllEntities();
   }, [fitSignal, fitToAllEntities]);
+
+  useEffect(() => {
+    if (!refreshSignal) return;
+    refetch();
+  }, [refreshSignal, refetch]);
+
+  useEffect(() => {
+    if (!onFetchMeta) return;
+    onFetchMeta({
+      lastFetchedAt: dataUpdatedAt > 0 ? dataUpdatedAt : undefined,
+      entityCount: data?.length ?? 0,
+    });
+  }, [data, dataUpdatedAt, onFetchMeta]);
 
   useEffect(() => {
     if (!onObservedRange) return;

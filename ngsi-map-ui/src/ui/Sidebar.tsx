@@ -3,9 +3,28 @@ type SidebarProps = {
   fromMax: string;
   minObserved?: number;
   onFromChange: (value: string) => void;
+  pollingPaused: boolean;
+  onTogglePolling: () => void;
+  onRefresh: () => void;
+  lastFetchedAt?: number | null;
+  entityCount: number;
 };
 
-export const Sidebar = ({ fromInput, fromMax, minObserved, onFromChange }: SidebarProps) => {
+export const Sidebar = ({
+  fromInput,
+  fromMax,
+  minObserved,
+  onFromChange,
+  pollingPaused,
+  onTogglePolling,
+  onRefresh,
+  lastFetchedAt,
+  entityCount,
+}: SidebarProps) => {
+  const lastFetchedLabel = lastFetchedAt
+    ? new Date(lastFetchedAt).toLocaleString("sv-SE")
+    : "Ej hämtat ännu";
+
   return (
     <aside className="flex h-full flex-col gap-6 border-r border-base-300 bg-base-200 px-6 py-6">
       <div>
@@ -74,6 +93,32 @@ export const Sidebar = ({ fromInput, fromMax, minObserved, onFromChange }: Sideb
               onChange={(event) => onFromChange(event.target.value)}
             />
           </label>
+        </div>
+      </div>
+
+      <div className="rounded-box bg-base-300/60 p-4">
+        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Cache & uppdatering</div>
+        <div className="mt-3 flex flex-col gap-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">Senast hämtad</span>
+            <span>{lastFetchedLabel}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">Antal entities</span>
+            <span className="font-semibold">{entityCount}</span>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn btn-sm btn-primary flex-1" type="button" onClick={onRefresh}>
+              Uppdatera nu
+            </button>
+            <button
+              className="btn btn-sm btn-outline flex-1"
+              type="button"
+              onClick={onTogglePolling}
+            >
+              {pollingPaused ? "Starta polling" : "Pausa polling"}
+            </button>
+          </div>
         </div>
       </div>
     </aside>

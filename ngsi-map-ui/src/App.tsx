@@ -33,6 +33,10 @@ const App = () => {
   const [observedRange, setObservedRange] = useState<{ min: number; max: number } | null>(null);
   const [rangeStart, setRangeStart] = useState(() => Date.now() - 24 * 60 * 60 * 1000);
   const [fitRequest, setFitRequest] = useState(0);
+  const [pollingPaused, setPollingPaused] = useState(false);
+  const [refreshSignal, setRefreshSignal] = useState(0);
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
+  const [entityCount, setEntityCount] = useState(0);
   const {
     data: types = [],
     isLoading: typesLoading,
@@ -81,6 +85,11 @@ const App = () => {
           fromMax={nowInput}
           minObserved={observedRange?.min}
           onFromChange={handleFromInputChange}
+          pollingPaused={pollingPaused}
+          onTogglePolling={() => setPollingPaused((value) => !value)}
+          onRefresh={() => setRefreshSignal((value) => value + 1)}
+          lastFetchedAt={lastFetchedAt}
+          entityCount={entityCount}
         />
 
         <main className="row-span-1 overflow-hidden bg-base-100 px-6 py-6">
@@ -127,6 +136,14 @@ const App = () => {
               rangeStart={rangeStart}
               fitSignal={fitRequest}
               types={types}
+              pollingPaused={pollingPaused}
+              refreshSignal={refreshSignal}
+              onFetchMeta={(meta) => {
+                setEntityCount(meta.entityCount);
+                if (meta.lastFetchedAt) {
+                  setLastFetchedAt(meta.lastFetchedAt);
+                }
+              }}
             />
           </div>
         </main>
