@@ -3,7 +3,12 @@ export type GeoJsonPoint = {
   coordinates: [number, number];
 };
 
-export type GeoJsonGeometry = GeoJsonPoint;
+export type GeoJsonLineString = {
+  type: "LineString";
+  coordinates: [number, number][];
+};
+
+export type GeoJsonGeometry = GeoJsonPoint | GeoJsonLineString;
 
 export type NgsiGeoProperty = {
   type: "GeoProperty";

@@ -5,13 +5,33 @@ const fallbackLabel = (entity: NgsiLdEntity) => {
   return name?.value ?? entity.id.split(":").pop() ?? entity.id;
 };
 
-const hasPointLocation = (
+const hasSupportedLocation = (
   entity: NgsiLdEntity,
-): entity is NgsiLdEntity & { location: NgsiGeoProperty } =>
-  entity.location?.value?.type === "Point";
+): entity is NgsiLdEntity & { location: NgsiGeoProperty } => {
+  const geometryType = entity.location?.value?.type;
+  return geometryType === "Point" || geometryType === "LineString";
+};
 
-const isZeroCoordinate = (coordinates: [number, number]) =>
-  coordinates[0] === 0 && coordinates[1] === 0;
+const isZeroCoordinate = (coordinate: [number, number]) =>
+  coordinate[0] === 0 && coordinate[1] === 0;
+
+const isValidCoordinate = (coordinate: [number, number]) =>
+  Number.isFinite(coordinate[0]) && Number.isFinite(coordinate[1]) && !isZeroCoordinate(coordinate);
+
+const isValidGeometry = (geometry: NgsiGeoProperty["value"]) => {
+  if (geometry.type === "Point") {
+    return isValidCoordinate(geometry.coordinates);
+  }
+
+  if (geometry.type === "LineString") {
+    const coordinates = geometry.coordinates;
+    if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
+    const validCount = coordinates.filter(isValidCoordinate).length;
+    return validCount >= 2;
+  }
+
+  return false;
+};
 
 const resolveObservedDate = (entity: NgsiLdEntity) => {
   const preferred =
@@ -80,8 +100,8 @@ const extractAttributes = (entity: NgsiLdEntity) => {
 
 export const toFeatureCollection = (entities: NgsiLdEntity[]): FeatureCollection => {
   const features = entities
-    .filter(hasPointLocation)
-    .filter((entity) => !isZeroCoordinate(entity.location.value.coordinates))
+    .filter(hasSupportedLocation)
+    .filter((entity) => isValidGeometry(entity.location.value))
     .map((entity) => ({
       type: "Feature" as const,
       geometry: entity.location.value,

@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/ngsi-ld": {
-        target: "https://test.diwise.io",
+        target: "https://klirr.diwise.io",
         changeOrigin: true,
         secure: true,
       },

@@ -30,6 +30,23 @@ const mockEntities: NgsiLdEntity[] = [
     location: { type: "GeoProperty", value: { type: "Point", coordinates: [18.0649, 59.3326] } },
   },
   {
+    id: "urn:ngsi-ld:Route:blue-line",
+    type: "Route",
+    name: { type: "Property", value: "Blue line" },
+    status: { type: "Property", value: "active" },
+    location: {
+      type: "GeoProperty",
+      value: {
+        type: "LineString",
+        coordinates: [
+          [18.035, 59.357],
+          [18.0649, 59.3326],
+          [18.09, 59.318],
+        ],
+      },
+    },
+  },
+  {
     id: "urn:ngsi-ld:Station:north",
     type: "Station",
     name: { type: "Property", value: "North" },
@@ -99,7 +116,7 @@ export const getTypes = async (signal?: AbortSignal): Promise<string[]> => {
   const useMock = (import.meta.env.VITE_NGSI_USE_MOCK as string | undefined) === "true";
 
   if ((!baseUrl && !import.meta.env.DEV) || useMock) {
-    return Promise.resolve(["Station", "Sensor"]);
+    return Promise.resolve(["Route", "Sensor", "Station"]);
   }
 
   const normalizedBase = baseUrl?.replace(/\/$/, "") ?? "";
