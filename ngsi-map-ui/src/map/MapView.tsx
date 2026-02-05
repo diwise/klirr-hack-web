@@ -5,7 +5,8 @@ import { getEntities } from "./ngsiClient";
 import { toFeatureCollection } from "./transformers";
 import type { FeatureCollection } from "./types";
 
-const defaultCenter: L.LatLngExpression = [59.3326, 18.0649];
+const defaultCenter: L.LatLngExpression = [55.796631179502235, 13.439286797433292];
+const defaultZoom = 9;
 
 const hashColor = (value: string) => {
   let hash = 0;
@@ -177,7 +178,7 @@ export const MapView = ({
       );
       return results.flat();
     },
-    refetchInterval: pollingPaused ? false : 15000,
+    refetchInterval: pollingPaused ? false : 60000,
   });
 
   const featureCollection: FeatureCollection = useMemo(() => {
@@ -258,7 +259,7 @@ export const MapView = ({
 
     const map = L.map(mapContainerRef.current, {
       center: defaultCenter,
-      zoom: 12,
+      zoom: defaultZoom,
       zoomControl: false,
     });
 
@@ -309,12 +310,8 @@ export const MapView = ({
       },
       () => {
         if (cancelled) return;
-        shouldFitOnDataRef.current = true;
-        if (!didInitialFitRef.current) {
-          if (fitToAllEntities()) {
-            didInitialFitRef.current = true;
-          }
-        }
+        shouldFitOnDataRef.current = false;
+        map.setView(defaultCenter, defaultZoom, { animate: true });
       },
       { enableHighAccuracy: true, maximumAge: 60_000, timeout: 5_000 },
     );

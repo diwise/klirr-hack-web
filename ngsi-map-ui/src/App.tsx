@@ -31,7 +31,7 @@ const parseDateTimeLocalValue = (value: string): number | null => {
 
 const App = () => {
   const [observedRange, setObservedRange] = useState<{ min: number; max: number } | null>(null);
-  const [rangeStart, setRangeStart] = useState(() => Date.now() - 24 * 60 * 60 * 1000);
+  const [rangeStart, setRangeStart] = useState(() => Date.now() - 3 * 24 * 60 * 60 * 1000);
   const [fitRequest, setFitRequest] = useState(0);
   const [pollingPaused, setPollingPaused] = useState(false);
   const [refreshSignal, setRefreshSignal] = useState(0);
